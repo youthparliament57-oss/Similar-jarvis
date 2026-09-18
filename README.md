@@ -371,6 +371,43 @@ open-jarvis/
 
 ---
 
+## Building & Installing APK
+
+### 1. Build Automatically via GitHub Actions (Recommended)
+1. Push this project to your GitHub repository:
+   ```bash
+   git init
+   git add .
+   git commit -m "Initial commit of Open Jarvis"
+   git branch -M main
+   git remote add origin https://github.com/<YOUR_USERNAME>/<YOUR_REPO>.git
+   git push -u origin main
+   ```
+2. In your GitHub repository, open the **Actions** tab.
+3. The **Build & Release Android APK** workflow will automatically build your APK.
+4. Once completed, click on the workflow run and download the **OpenJarvis-Debug-APK** artifact.
+5. Extract the ZIP and install the APK on your Android phone.
+
+### 2. Build Locally using Gradle
+To build the APK locally on your computer or in Android Studio:
+```bash
+# Grant execution permissions to gradlew
+chmod +x gradlew
+
+# Build debug APK
+./gradlew assembleDebug
+
+# Output APK location:
+# app/build/outputs/apk/debug/app-debug.apk
+```
+
+To install directly to a connected Android device via ADB:
+```bash
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+```
+
+---
+
 ## Contributing
 
 Contributions welcome! Please read [docs/PROVIDERS.md](docs/PROVIDERS.md) for adding new LLM providers. See [docs/BRIDGE.md](docs/BRIDGE.md) for CLI documentation.
