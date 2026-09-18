@@ -36,3 +36,6 @@ google-services.json
 # Build outputs & cache
 .build-outputs/
 .kotlin/
+apk_release/
+*.tar.gz
+*.apk
