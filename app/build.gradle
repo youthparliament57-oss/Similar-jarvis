@@ -19,6 +19,35 @@ android {
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    // Ensure debug.keystore exists before signing config validation
+    def keystoreFile = file("${rootDir}/debug.keystore")
+    if (!keystoreFile.exists()) {
+        def base64File = file("${rootDir}/debug.keystore.base64")
+        if (base64File.exists()) {
+            try {
+                byte[] bytes = java.util.Base64.decoder.decode(base64File.text.replaceAll("\\s+", ""))
+                keystoreFile.bytes = bytes
+            } catch (Exception ignored) {}
+        }
+    }
+    if (!keystoreFile.exists()) {
+        try {
+            def cmd = [
+                "keytool", "-genkeypair", "-v",
+                "-keystore", keystoreFile.absolutePath,
+                "-storepass", "android",
+                "-alias", "androiddebugkey",
+                "-keypass", "android",
+                "-keyalg", "RSA",
+                "-keysize", "2048",
+                "-validity", "10000",
+                "-dname", "CN=Android Debug,O=Android,C=US"
+            ]
+            def proc = cmd.execute()
+            proc.waitFor()
+        } catch (Exception ignored) {}
+    }
+
     signingConfigs {
         debugConfig {
             storeFile file("${rootDir}/debug.keystore")
