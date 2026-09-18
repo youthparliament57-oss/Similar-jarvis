@@ -19,6 +19,9 @@ data class Action(
     val prompt: String? = null,
     val outputKey: String? = null
 ) {
+    val description: String
+        get() = message ?: label ?: text ?: value ?: action
+
     companion object {
         const val OPEN_APP = "open_app"
         const val TAP = "tap"

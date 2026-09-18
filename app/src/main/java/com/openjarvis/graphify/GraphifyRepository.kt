@@ -216,6 +216,17 @@ class GraphifyRepository(context: Context) {
         providerNodeDao.recordSuccess(id, latency)
     }
 
+    suspend fun logProviderFailure(name: String, error: String) = withContext(Dispatchers.IO) {
+        val node = providerNodeDao.getByName(name)
+        if (node != null) {
+            providerNodeDao.incrementUse(node.id)
+        }
+    }
+
+    suspend fun logNotification(content: String) = withContext(Dispatchers.IO) {
+        logTask("notification: $content", "received", "system", 0)
+    }
+
     suspend fun insertEdge(edge: EdgeEntity): Long = withContext(Dispatchers.IO) {
         edgeDao.insert(edge)
     }

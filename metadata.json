@@ -1,0 +1,6 @@
+{
+  "name": "Open Jarvis",
+  "description": "An autonomous AI assistant for Android with accessibility, screen reading, and automation capabilities",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

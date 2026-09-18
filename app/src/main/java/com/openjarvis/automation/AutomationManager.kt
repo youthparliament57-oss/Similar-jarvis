@@ -19,39 +19,40 @@ class AutomationManager(private val context: Context) {
     val automationsFlow: StateFlow<List<Automation>> = _automationsFlow
     
     suspend fun loadAutomations() {
-        _automationsFlow.value = dao.getAll()
+        _automationsFlow.value = dao.getAll().map { it.toAutomation() }
     }
     
     suspend fun createAutomation(automation: Automation): String = withContext(Dispatchers.IO) {
-        dao.insert(automation)
+        dao.insert(automation.toEntity())
         
         scheduleAutomation(automation)
         
-        _automationsFlow.value = dao.getAll()
+        _automationsFlow.value = dao.getAll().map { it.toAutomation() }
         automation.id
     }
     
     suspend fun updateAutomation(automation: Automation) = withContext(Dispatchers.IO) {
-        dao.update(automation)
+        dao.update(automation.toEntity())
         cancelAutomation(automation.id)
         
         if (automation.enabled) {
             scheduleAutomation(automation)
         }
         
-        _automationsFlow.value = dao.getAll()
+        _automationsFlow.value = dao.getAll().map { it.toAutomation() }
     }
     
     suspend fun deleteAutomation(id: String) = withContext(Dispatchers.IO) {
         cancelAutomation(id)
         dao.delete(id)
-        _automationsFlow.value = dao.getAll()
+        _automationsFlow.value = dao.getAll().map { it.toAutomation() }
     }
     
     suspend fun toggleAutomation(id: String, enabled: Boolean) = withContext(Dispatchers.IO) {
-        val automation = dao.getById(id) ?: return@withContext
+        val entity = dao.getById(id) ?: return@withContext
+        val automation = entity.toAutomation()
         val updated = automation.copy(enabled = enabled)
-        dao.update(updated)
+        dao.update(updated.toEntity())
         
         if (enabled) {
             scheduleAutomation(updated)
@@ -59,11 +60,12 @@ class AutomationManager(private val context: Context) {
             cancelAutomation(id)
         }
         
-        _automationsFlow.value = dao.getAll()
+        _automationsFlow.value = dao.getAll().map { it.toAutomation() }
     }
     
     suspend fun runNow(id: String) = withContext(Dispatchers.IO) {
-        val automation = dao.getById(id) ?: return@withContext
+        val entity = dao.getById(id) ?: return@withContext
+        val automation = entity.toAutomation()
         executeAutomation(automation)
     }
     
@@ -77,9 +79,9 @@ class AutomationManager(private val context: Context) {
             "automation_command" to automation.command
         )
         
-        val request = when (val schedule = automation.schedule) {
+        when (val schedule = automation.schedule) {
             is AutomationSchedule.Daily -> {
-                PeriodicWorkRequestBuilder<AutomationWorker>(
+                val request = PeriodicWorkRequestBuilder<AutomationWorker>(
                     24, TimeUnit.HOURS,
                     15, TimeUnit.MINUTES
                 )
@@ -88,9 +90,11 @@ class AutomationManager(private val context: Context) {
                     .setInitialDelay(calculateDelay(schedule.hour, schedule.minute), TimeUnit.MILLISECONDS)
                     .addTag(automation.id)
                     .build()
+                WorkManager.getInstance(context)
+                    .enqueueUniquePeriodicWork(automation.id, ExistingPeriodicWorkPolicy.UPDATE, request)
             }
             is AutomationSchedule.Weekly -> {
-                PeriodicWorkRequestBuilder<AutomationWorker>(
+                val request = PeriodicWorkRequestBuilder<AutomationWorker>(
                     7, TimeUnit.DAYS,
                     15, TimeUnit.MINUTES
                 )
@@ -99,32 +103,36 @@ class AutomationManager(private val context: Context) {
                     .setInitialDelay(calculateWeeklyDelay(schedule.dayOfWeek, schedule.hour, schedule.minute), TimeUnit.MILLISECONDS)
                     .addTag(automation.id)
                     .build()
+                WorkManager.getInstance(context)
+                    .enqueueUniquePeriodicWork(automation.id, ExistingPeriodicWorkPolicy.UPDATE, request)
             }
             is AutomationSchedule.Interval -> {
-                PeriodicWorkRequestBuilder<AutomationWorker>(
-                    schedule.intervalMs, TimeUnit.MILLISECONDS,
-                    1, TimeUnit.MINUTES
+                val interval = maxOf(schedule.intervalMs, PeriodicWorkRequest.MIN_PERIODIC_INTERVAL_MILLIS)
+                val request = PeriodicWorkRequestBuilder<AutomationWorker>(
+                    interval, TimeUnit.MILLISECONDS,
+                    PeriodicWorkRequest.MIN_PERIODIC_FLEX_MILLIS, TimeUnit.MILLISECONDS
                 )
                     .setConstraints(constraints)
                     .setInputData(inputData)
                     .addTag(automation.id)
                     .build()
+                WorkManager.getInstance(context)
+                    .enqueueUniquePeriodicWork(automation.id, ExistingPeriodicWorkPolicy.UPDATE, request)
             }
             is AutomationSchedule.Once -> {
                 val delay = schedule.atMs - System.currentTimeMillis()
                 if (delay <= 0) return
                 
-                OneTimeWorkRequestBuilder<AutomationWorker>()
+                val request = OneTimeWorkRequestBuilder<AutomationWorker>()
                     .setConstraints(constraints)
                     .setInputData(inputData)
                     .setInitialDelay(delay, TimeUnit.MILLISECONDS)
                     .addTag(automation.id)
                     .build()
+                WorkManager.getInstance(context)
+                    .enqueueUniqueWork(automation.id, ExistingWorkPolicy.REPLACE, request)
             }
         }
-        
-        WorkManager.getInstance(context)
-            .enqueueUniqueWork(automation.id, ExistingWorkPolicy.REPLACE, request)
     }
     
     private fun cancelAutomation(id: String) {
@@ -143,7 +151,7 @@ class AutomationManager(private val context: Context) {
             lastResult = result,
             runCount = automation.runCount + 1
         )
-        dao.update(updated)
+        dao.update(updated.toEntity())
     }
     
     private fun calculateDelay(targetHour: Int, targetMinute: Int): Long {

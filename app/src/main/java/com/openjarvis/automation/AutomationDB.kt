@@ -21,25 +21,97 @@ data class AutomationEntity(
     val runCount: Int = 0
 )
 
+fun AutomationEntity.toAutomation(): AutomationManager.Automation {
+    val schedule = when (scheduleType) {
+        "daily" -> AutomationManager.AutomationSchedule.Daily(scheduleHour, scheduleMinute)
+        "weekly" -> AutomationManager.AutomationSchedule.Weekly(scheduleDayOfWeek, scheduleHour, scheduleMinute)
+        "interval" -> AutomationManager.AutomationSchedule.Interval(scheduleIntervalMs)
+        "once" -> AutomationManager.AutomationSchedule.Once(scheduleIntervalMs)
+        else -> AutomationManager.AutomationSchedule.Interval(60 * 60 * 1000L)
+    }
+    return AutomationManager.Automation(
+        id = id,
+        name = name,
+        command = command,
+        schedule = schedule,
+        enabled = enabled,
+        lastRun = lastRun,
+        lastResult = lastResult,
+        runCount = runCount
+    )
+}
+
+fun AutomationManager.Automation.toEntity(): AutomationEntity {
+    val sType: String
+    val sHour: Int
+    val sMinute: Int
+    val sDay: Int
+    val sInterval: Long
+    when (val s = schedule) {
+        is AutomationManager.AutomationSchedule.Daily -> {
+            sType = "daily"
+            sHour = s.hour
+            sMinute = s.minute
+            sDay = 0
+            sInterval = 0L
+        }
+        is AutomationManager.AutomationSchedule.Weekly -> {
+            sType = "weekly"
+            sHour = s.hour
+            sMinute = s.minute
+            sDay = s.dayOfWeek
+            sInterval = 0L
+        }
+        is AutomationManager.AutomationSchedule.Interval -> {
+            sType = "interval"
+            sHour = 0
+            sMinute = 0
+            sDay = 0
+            sInterval = s.intervalMs
+        }
+        is AutomationManager.AutomationSchedule.Once -> {
+            sType = "once"
+            sHour = 0
+            sMinute = 0
+            sDay = 0
+            sInterval = s.atMs
+        }
+    }
+    return AutomationEntity(
+        id = id,
+        name = name,
+        command = command,
+        scheduleType = sType,
+        scheduleHour = sHour,
+        scheduleMinute = sMinute,
+        scheduleDayOfWeek = sDay,
+        scheduleIntervalMs = sInterval,
+        enabled = enabled,
+        lastRun = lastRun,
+        lastResult = lastResult,
+        runCount = runCount
+    )
+}
+
 @Dao
 interface AutomationDao {
     @Query("SELECT * FROM automations ORDER BY name")
-    suspend fun getAll(): List<AutomationManager.Automation>
+    suspend fun getAll(): List<AutomationEntity>
     
     @Query("SELECT * FROM automations WHERE id = :id")
-    suspend fun getById(id: String): AutomationManager.Automation?
+    suspend fun getById(id: String): AutomationEntity?
     
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insert(automation: AutomationManager.Automation)
+    suspend fun insert(automation: AutomationEntity)
     
     @Update
-    suspend fun update(automation: AutomationManager.Automation)
+    suspend fun update(automation: AutomationEntity)
     
     @Query("DELETE FROM automations WHERE id = :id")
     suspend fun delete(id: String)
 }
 
-@Database(entities = [AutomationEntity::class], version = 1)
+@Database(entities = [AutomationEntity::class], version = 1, exportSchema = false)
 abstract class AutomationDB : RoomDatabase() {
     abstract fun automationDao(): AutomationDao
     
@@ -71,7 +143,8 @@ class AutomationWorker(
             val db = AutomationDB.getInstance(applicationContext)
             val dao = db.automationDao()
             
-            val automation = dao.getById(id) ?: return Result.failure()
+            val entity = dao.getById(id) ?: return Result.failure()
+            val automation = entity.toAutomation()
             
             kotlinx.coroutines.delay(2000)
             
@@ -80,7 +153,7 @@ class AutomationWorker(
                 lastResult = "success",
                 runCount = automation.runCount + 1
             )
-            dao.update(updated)
+            dao.update(updated.toEntity())
             
             Result.success()
         } catch (e: Exception) {

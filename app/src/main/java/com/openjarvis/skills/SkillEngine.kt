@@ -39,14 +39,17 @@ class SkillEngine(private val context: Context) {
     }
     
     private fun copyBuiltinSkillsIfNeeded() {
-        val builtinDir = File(context.assets, "skills")
-        if (!builtinDir.exists()) return
+        val assetFiles = try {
+            context.assets.list("skills") ?: emptyArray()
+        } catch (e: Exception) {
+            emptyArray()
+        }
         
-        builtinDir.listFiles()?.forEach { assetFile ->
-            val destFile = File(skillsDir, assetFile.name)
+        assetFiles.forEach { fileName ->
+            val destFile = File(skillsDir, fileName)
             if (!destFile.exists()) {
                 try {
-                    context.assets.open("skills/${assetFile.name}").use { input ->
+                    context.assets.open("skills/$fileName").use { input ->
                         destFile.outputStream().use { output ->
                             input.copyTo(output)
                         }
@@ -252,6 +255,6 @@ data class Skill(
     val actionTemplate: List<Action>,
     val successVerification: String,
     val tags: List<String>,
-    val usageCount: Int,
-    val successRate: Float
+    val usageCount: Int = 0,
+    val successRate: Float = 1.0f
 )
